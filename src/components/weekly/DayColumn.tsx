@@ -3,7 +3,7 @@
 import { useDroppable } from '@dnd-kit/core';
 import Link from 'next/link';
 import { Schedule } from '@/types';
-import { cn, formatDate, isToday, isWeekend, formatDuration } from '@/lib/utils';
+import { cn, formatDate, isToday, isWeekend, formatDuration, normalizeTime } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { CheckCircle, Clock, MoreHorizontal } from 'lucide-react';
@@ -118,7 +118,7 @@ export function DayColumn({
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
-                  {schedule.startTime}
+                  {normalizeTime(schedule.startTime)}
                 </div>
               </div>
 

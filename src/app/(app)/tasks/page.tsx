@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { TaskForm } from '@/components/tasks/TaskForm';
-import { Plus, Clock, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Clock, Trash2, Edit2, X } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -205,18 +205,31 @@ export default function TasksPage() {
         setIsFormOpen(open);
         if (!open) setEditingTask(null);
       }}>
-        <DialogContent className="max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingTask ? '할 일 수정' : '새 할 일'}</DialogTitle>
-          </DialogHeader>
-          <TaskForm
-            initialData={editingTask || undefined}
-            onSubmit={handleFormSubmit}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingTask(null);
-            }}
-          />
+        <DialogContent className="max-w-md rounded-2xl max-h-[85vh] flex flex-col p-0" showCloseButton={false}>
+          {/* 고정 헤더 */}
+          <div className="sticky top-0 z-10 bg-background border-b px-6 py-4 flex items-center justify-between shrink-0 rounded-t-2xl">
+            <DialogTitle className="text-lg font-semibold">{editingTask ? '할 일 수정' : '새 할 일'}</DialogTitle>
+            <button
+              onClick={() => {
+                setIsFormOpen(false);
+                setEditingTask(null);
+              }}
+              className="p-2 rounded-full hover:bg-muted transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {/* 스크롤 가능한 컨텐츠 영역 */}
+          <div className="flex-1 overflow-auto px-6 py-4">
+            <TaskForm
+              initialData={editingTask || undefined}
+              onSubmit={handleFormSubmit}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingTask(null);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>

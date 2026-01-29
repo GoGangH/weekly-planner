@@ -13,6 +13,7 @@ export interface Profile {
   createdAt: Date;
 }
 
+// 백로그 할 일 (일정에 배치되지 않은 할 일)
 export interface Task {
   id: string;
   userId: string;
@@ -31,41 +32,95 @@ export interface Task {
   updatedAt: Date;
 }
 
+// 일정 내 할일 항목 (체크 가능)
+export interface ScheduleItem {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  order: number;
+}
+
+// 일정 (시간 블록 - 컨테이너)
 export interface Schedule {
   id: string;
   userId: string;
-  taskId?: string; // nullable: 태스크 없이 일정만 등록 가능
-  task?: Task; // Joined task data
-  title?: string; // 태스크 없이 일정 등록시 사용
+  title: string; // 일정 제목 (예: "아침 루틴", "업무")
   description?: string;
-  color?: string;
-  date: string; // ISO date string
+  color: string;
+  date: string; // ISO date string (YYYY-MM-DD)
   startTime: string; // HH:mm format
   endTime: string; // HH:mm format
+  items: ScheduleItem[]; // 일정 내 할일들
+  status: ScheduleStatus;
+  completedMinutes?: number; // 완료된 시간 (분)
+  routineId?: string; // 루틴에서 생성된 경우
+  googleEventId?: string;
+  syncedFromGoogle: boolean;
+  createdAt: Date;
+  // 일정 변경 관련
   originalDate?: string;
   originalStartTime?: string;
   originalEndTime?: string;
   modifiedAt?: Date;
   modifiedReason?: string;
-  status: ScheduleStatus;
-  completedMinutes?: number;
-  googleEventId?: string;
-  syncedFromGoogle: boolean;
-  createdAt: Date;
+
+  // Legacy fields (하위 호환)
+  taskId?: string;
+  task?: Task;
 }
 
+// 루틴 내 항목 (템플릿)
+export interface RoutineItem {
+  id: string;
+  title: string;
+  order: number;
+}
+
+// 루틴 (반복 일정 템플릿)
 export interface Routine {
   id: string;
   userId: string;
-  title: string;
+  title: string; // 루틴 그룹명 (예: "아침 루틴")
   description?: string;
   days: number[]; // [1,2,3,4,5,6,0] Mon-Sun
   startTime: string; // HH:mm format
   endTime: string; // HH:mm format
+  items: RoutineItem[]; // 루틴 내 세부 항목들
   isActive: boolean;
   autoSchedule: boolean;
   color: string;
+  category?: string;
+  startDate?: string; // YYYY-MM-DD 루틴 시작일
+  endDate?: string; // YYYY-MM-DD 루틴 종료일 (없으면 무기한)
   createdAt: Date;
+}
+
+// 루틴 완료 기록
+export interface RoutineLog {
+  id: string;
+  routineId: string;
+  userId: string;
+  date: string; // YYYY-MM-DD
+  isCompleted: boolean;
+  completedAt?: Date;
+}
+
+// 주간 목표의 세부 할 일
+export interface GoalSubTask {
+  id: string;
+  title: string;
+  targetCount: number; // 해야 할 횟수
+  completedCount: number; // 완료된 횟수
+  estimatedMinutes: number; // 1회당 예상 시간
+  category?: string;
+}
+
+// 주간 목표
+export interface WeeklyGoal {
+  id: string;
+  title: string;
+  subTasks: GoalSubTask[];
+  isCompleted: boolean;
 }
 
 export interface Week {
@@ -73,7 +128,8 @@ export interface Week {
   userId: string;
   startDate: string; // ISO date string
   endDate: string; // ISO date string
-  goals: string[];
+  goals: string[]; // 기존 단순 목표 (하위 호환)
+  weeklyGoals?: WeeklyGoal[]; // 새로운 구조화된 목표
   notes?: string;
   plannedMinutes: number;
   completedMinutes: number;
@@ -134,13 +190,14 @@ export interface TaskFormData {
 }
 
 export interface ScheduleFormData {
-  taskId?: string; // nullable: 태스크 없이 일정만 등록 가능
-  title?: string; // 태스크 없이 일정 등록시 사용
+  title: string;
   description?: string;
-  color?: string;
+  color: string;
   date: string;
   startTime: string;
   endTime: string;
+  items?: ScheduleItem[]; // 일정 내 할일들
+  routineId?: string; // 루틴에서 생성된 경우
 }
 
 export interface RoutineFormData {
@@ -149,9 +206,12 @@ export interface RoutineFormData {
   days: number[];
   startTime: string;
   endTime: string;
+  items: RoutineItem[]; // 루틴 내 세부 항목들
   isActive: boolean;
   autoSchedule: boolean;
   color: string;
+  startDate?: string; // YYYY-MM-DD 루틴 시작일
+  endDate?: string; // YYYY-MM-DD 루틴 종료일 (없으면 무기한)
 }
 
 // Drag and drop types

@@ -11,9 +11,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { RoutineForm } from '@/components/routines/RoutineForm';
-import { Plus, Clock, Trash2, Edit2, Power } from 'lucide-react';
+import { Plus, Clock, Trash2, Edit2, Power, X } from 'lucide-react';
 import { DAYS_OF_WEEK } from '@/lib/constants';
-import { cn } from '@/lib/utils';
+import { cn, normalizeTime } from '@/lib/utils';
 
 export default function RoutinesPage() {
   const {
@@ -173,18 +173,31 @@ export default function RoutinesPage() {
         setIsFormOpen(open);
         if (!open) setEditingRoutine(null);
       }}>
-        <DialogContent className="max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingRoutine ? '루틴 수정' : '새 루틴'}</DialogTitle>
-          </DialogHeader>
-          <RoutineForm
-            initialData={editingRoutine || undefined}
-            onSubmit={handleFormSubmit}
-            onCancel={() => {
-              setIsFormOpen(false);
-              setEditingRoutine(null);
-            }}
-          />
+        <DialogContent className="max-w-md rounded-2xl max-h-[85vh] flex flex-col p-0" showCloseButton={false}>
+          {/* 고정 헤더 */}
+          <div className="sticky top-0 z-10 bg-background border-b px-6 py-4 flex items-center justify-between shrink-0 rounded-t-2xl">
+            <DialogTitle className="text-lg font-semibold">{editingRoutine ? '루틴 수정' : '새 루틴'}</DialogTitle>
+            <button
+              onClick={() => {
+                setIsFormOpen(false);
+                setEditingRoutine(null);
+              }}
+              className="p-2 rounded-full hover:bg-muted transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {/* 스크롤 가능한 컨텐츠 영역 */}
+          <div className="flex-1 overflow-auto px-6 py-4">
+            <RoutineForm
+              initialData={editingRoutine || undefined}
+              onSubmit={handleFormSubmit}
+              onCancel={() => {
+                setIsFormOpen(false);
+                setEditingRoutine(null);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -201,6 +214,8 @@ interface RoutineCardProps {
 }
 
 function RoutineCard({ routine, index, getDayLabels, onEdit, onDelete, onToggle }: RoutineCardProps) {
+  const hasItems = routine.items && routine.items.length > 0;
+
   return (
     <div
       className={cn(
@@ -232,14 +247,32 @@ function RoutineCard({ routine, index, getDayLabels, onEdit, onDelete, onToggle 
               {routine.description}
             </p>
           )}
+
+          {/* 할일 목록 표시 */}
+          {hasItems && (
+            <div className="mt-2 space-y-1">
+              {routine.items.map((item, idx) => (
+                <div key={item.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  <span>{item.title}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {routine.startTime} - {routine.endTime}
+              {normalizeTime(routine.startTime)} - {normalizeTime(routine.endTime)}
             </span>
             <span className="bg-muted px-2 py-0.5 rounded-full">
               {getDayLabels(routine.days)}
             </span>
+            {hasItems && (
+              <span className="bg-muted px-2 py-0.5 rounded-full">
+                {routine.items.length}개 할일
+              </span>
+            )}
             {routine.autoSchedule && (
               <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full">
                 자동

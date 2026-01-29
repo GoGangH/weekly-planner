@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Schedule, ScheduleFormData, ScheduleStatus, Task } from '@/types';
+import { Schedule, ScheduleFormData, ScheduleStatus, ScheduleItem, Task } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { generateId, formatDate } from '@/lib/utils';
 
@@ -10,7 +10,7 @@ interface ScheduleState {
 
   // Actions
   fetchSchedules: () => Promise<void>;
-  addSchedule: (data: ScheduleFormData, task?: Task) => Promise<Schedule>; // task is now optional
+  addSchedule: (data: ScheduleFormData) => Promise<Schedule>;
   updateSchedule: (id: string, data: Partial<Schedule>, reason?: string) => Promise<void>;
   deleteSchedule: (id: string) => Promise<void>;
   updateScheduleStatus: (id: string, status: ScheduleStatus, completedMinutes?: number) => Promise<void>;
@@ -18,6 +18,12 @@ interface ScheduleState {
   getSchedulesByDate: (date: string) => Schedule[];
   getSchedulesByDateRange: (startDate: string, endDate: string) => Schedule[];
   getScheduleById: (id: string) => Schedule | undefined;
+
+  // 일정 내 할일 관리
+  addScheduleItem: (scheduleId: string, title: string) => Promise<void>;
+  toggleScheduleItem: (scheduleId: string, itemId: string) => Promise<void>;
+  removeScheduleItem: (scheduleId: string, itemId: string) => Promise<void>;
+  updateScheduleItem: (scheduleId: string, itemId: string, title: string) => Promise<void>;
 }
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({
@@ -38,10 +44,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
       const { data, error } = await supabase
         .from('schedules')
-        .select(`
-          *,
-          task:tasks(*)
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('date', { ascending: true })
         .order('start_time', { ascending: true });
@@ -51,40 +54,20 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       const schedules: Schedule[] = (data || []).map((s) => ({
         id: s.id,
         userId: s.user_id,
-        taskId: s.task_id || undefined,
-        task: s.task ? {
-          id: s.task.id,
-          userId: s.task.user_id,
-          title: s.task.title,
-          description: s.task.description || undefined,
-          estimatedMinutes: s.task.estimated_minutes,
-          actualMinutes: s.task.actual_minutes || undefined,
-          isRecurring: s.task.is_recurring,
-          recurringType: s.task.recurring_type || undefined,
-          recurringDays: s.task.recurring_days || undefined,
-          status: s.task.status,
-          category: s.task.category || undefined,
-          color: s.task.color,
-          weekId: s.task.week_id || undefined,
-          createdAt: new Date(s.task.created_at),
-          updatedAt: new Date(s.task.updated_at),
-        } : undefined,
-        title: s.title || undefined,
+        title: s.title || '일정',
         description: s.description || undefined,
-        color: s.color || undefined,
+        color: s.color || '#8B7CF6',
         date: s.date,
         startTime: s.start_time,
         endTime: s.end_time,
-        originalDate: s.original_date || undefined,
-        originalStartTime: s.original_start_time || undefined,
-        originalEndTime: s.original_end_time || undefined,
-        modifiedAt: s.modified_at ? new Date(s.modified_at) : undefined,
-        modifiedReason: s.modified_reason || undefined,
+        items: s.items || [],
         status: s.status as ScheduleStatus,
-        completedMinutes: s.completed_minutes || undefined,
+        routineId: s.routine_id || undefined,
         googleEventId: s.google_event_id || undefined,
-        syncedFromGoogle: s.synced_from_google,
+        syncedFromGoogle: s.synced_from_google || false,
         createdAt: new Date(s.created_at),
+        // Legacy fields
+        taskId: s.task_id || undefined,
       }));
 
       set({ schedules, isLoading: false });
@@ -95,30 +78,48 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     }
   },
 
-  addSchedule: async (data: ScheduleFormData, task?: Task) => {
+  addSchedule: async (data: ScheduleFormData) => {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) throw new Error('Not authenticated');
 
+    // 프로필이 없으면 생성
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.name || user.user_metadata?.full_name || null,
+          avatar_url: user.user_metadata?.avatar_url || null,
+        });
+
+      if (profileError) {
+        console.error('프로필 생성 실패:', profileError);
+        throw new Error(`프로필 생성 실패: ${profileError.message}`);
+      }
+    }
+
     const newScheduleData: Record<string, unknown> = {
       user_id: user.id,
+      title: data.title,
+      description: data.description || null,
+      color: data.color || '#8B7CF6',
       date: data.date,
       start_time: data.startTime,
       end_time: data.endTime,
+      items: data.items || [],
       status: 'planned',
+      routine_id: data.routineId || null,
       synced_from_google: false,
     };
-
-    // 태스크가 있는 경우
-    if (data.taskId && task) {
-      newScheduleData.task_id = data.taskId;
-    } else {
-      // 태스크 없이 일정만 등록하는 경우
-      newScheduleData.title = data.title;
-      newScheduleData.description = data.description || null;
-      newScheduleData.color = data.color || '#8B7CF6';
-    }
 
     const { data: inserted, error } = await supabase
       .from('schedules')
@@ -134,15 +135,15 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const newSchedule: Schedule = {
       id: inserted.id,
       userId: inserted.user_id,
-      taskId: inserted.task_id || undefined,
-      task,
-      title: inserted.title || undefined,
+      title: inserted.title,
       description: inserted.description || undefined,
-      color: inserted.color || undefined,
+      color: inserted.color || '#8B7CF6',
       date: inserted.date,
       startTime: inserted.start_time,
       endTime: inserted.end_time,
+      items: inserted.items || [],
       status: 'planned',
+      routineId: inserted.routine_id || undefined,
       syncedFromGoogle: false,
       createdAt: new Date(inserted.created_at),
     };
@@ -259,5 +260,120 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   getScheduleById: (id: string) => {
     return get().schedules.find((s) => s.id === id);
+  },
+
+  // 일정 내 할일 추가
+  addScheduleItem: async (scheduleId: string, title: string) => {
+    const schedule = get().schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const newItem: ScheduleItem = {
+      id: generateId(),
+      title,
+      isCompleted: false,
+      order: schedule.items.length,
+    };
+
+    const updatedItems = [...schedule.items, newItem];
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('schedules')
+      .update({ items: updatedItems })
+      .eq('id', scheduleId);
+
+    if (error) {
+      console.error('Failed to add schedule item:', error);
+      return;
+    }
+
+    set((state) => ({
+      schedules: state.schedules.map((s) =>
+        s.id === scheduleId ? { ...s, items: updatedItems } : s
+      ),
+    }));
+  },
+
+  // 일정 내 할일 완료 토글
+  toggleScheduleItem: async (scheduleId: string, itemId: string) => {
+    const schedule = get().schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const updatedItems = schedule.items.map((item) =>
+      item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
+    );
+
+    // 모든 항목이 완료되었는지 확인
+    const allCompleted = updatedItems.length > 0 && updatedItems.every((item) => item.isCompleted);
+    const newStatus: ScheduleStatus = allCompleted ? 'completed' : 'planned';
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('schedules')
+      .update({ items: updatedItems, status: newStatus })
+      .eq('id', scheduleId);
+
+    if (error) {
+      console.error('Failed to toggle schedule item:', error);
+      return;
+    }
+
+    set((state) => ({
+      schedules: state.schedules.map((s) =>
+        s.id === scheduleId ? { ...s, items: updatedItems, status: newStatus } : s
+      ),
+    }));
+  },
+
+  // 일정 내 할일 삭제
+  removeScheduleItem: async (scheduleId: string, itemId: string) => {
+    const schedule = get().schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const updatedItems = schedule.items.filter((item) => item.id !== itemId);
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('schedules')
+      .update({ items: updatedItems })
+      .eq('id', scheduleId);
+
+    if (error) {
+      console.error('Failed to remove schedule item:', error);
+      return;
+    }
+
+    set((state) => ({
+      schedules: state.schedules.map((s) =>
+        s.id === scheduleId ? { ...s, items: updatedItems } : s
+      ),
+    }));
+  },
+
+  // 일정 내 할일 제목 수정
+  updateScheduleItem: async (scheduleId: string, itemId: string, title: string) => {
+    const schedule = get().schedules.find((s) => s.id === scheduleId);
+    if (!schedule) return;
+
+    const updatedItems = schedule.items.map((item) =>
+      item.id === itemId ? { ...item, title } : item
+    );
+
+    const supabase = createClient();
+    const { error } = await supabase
+      .from('schedules')
+      .update({ items: updatedItems })
+      .eq('id', scheduleId);
+
+    if (error) {
+      console.error('Failed to update schedule item:', error);
+      return;
+    }
+
+    set((state) => ({
+      schedules: state.schedules.map((s) =>
+        s.id === scheduleId ? { ...s, items: updatedItems } : s
+      ),
+    }));
   },
 }));

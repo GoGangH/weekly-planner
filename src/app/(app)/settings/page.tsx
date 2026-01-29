@@ -23,15 +23,22 @@ import {
   Plus,
   Trash2,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { useSettingsStore, Category } from '@/stores/settingsStore';
 
 // 색상 선택용 팔레트
-const COLOR_PALETTE = [
+const QUICK_COLORS = [
+  '#8B7CF6', '#60A5FA', '#34D399', '#FBBF24', '#F472B6',
+];
+
+const FULL_COLOR_PALETTE = [
   '#8B7CF6', '#60A5FA', '#34D399', '#FBBF24', '#F472B6', '#22D3EE', '#FB923C', '#A78BFA',
   '#EF4444', '#10B981', '#6366F1', '#EC4899', '#14B8A6', '#F59E0B', '#8B5CF6', '#06B6D4',
+  '#DC2626', '#059669', '#4F46E5', '#DB2777', '#0D9488', '#D97706', '#7C3AED', '#0891B2',
+  '#B91C1C', '#047857', '#4338CA', '#BE185D', '#0F766E', '#B45309', '#6D28D9', '#0E7490',
 ];
 
 interface GoogleCalendarInfo {
@@ -56,6 +63,8 @@ export default function SettingsPage() {
   const [newCategoryLabel, setNewCategoryLabel] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('📌');
   const [newCategoryColor, setNewCategoryColor] = useState('#8B7CF6');
+  const [showFullPalette, setShowFullPalette] = useState(false);
+  const [customColorInput, setCustomColorInput] = useState('');
 
   // Settings Store
   const {
@@ -142,6 +151,16 @@ export default function SettingsPage() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
   const handleAddCategory = () => {
     if (!newCategoryLabel.trim()) return;
 
@@ -157,6 +176,8 @@ export default function SettingsPage() {
     setNewCategoryLabel('');
     setNewCategoryIcon('📌');
     setNewCategoryColor('#8B7CF6');
+    setShowFullPalette(false);
+    setCustomColorInput('');
     setIsCategorySheetOpen(false);
   };
 
@@ -443,6 +464,18 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* 로그아웃 */}
+          <section>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-destructive font-medium transition-colors hover:bg-destructive/10"
+              >
+                로그아웃
+              </button>
+            </div>
+          </section>
+
           {/* App info */}
           <div className="text-center py-8 text-sm text-muted-foreground">
             <p className="font-medium">Weekly Planner</p>
@@ -453,11 +486,19 @@ export default function SettingsPage() {
 
       {/* 카테고리 추가 Sheet */}
       <Sheet open={isCategorySheetOpen} onOpenChange={setIsCategorySheetOpen}>
-        <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl overflow-auto">
-          <SheetHeader>
-            <SheetTitle>새 카테고리 추가</SheetTitle>
-          </SheetHeader>
-          <div className="mt-6 space-y-6 px-1">
+        <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl flex flex-col p-0" showCloseButton={false}>
+          {/* 고정 헤더 */}
+          <div className="sticky top-0 z-10 bg-background border-b px-6 py-4 flex items-center justify-between shrink-0 rounded-t-3xl">
+            <SheetTitle className="text-lg font-semibold">새 카테고리 추가</SheetTitle>
+            <button
+              onClick={() => setIsCategorySheetOpen(false)}
+              className="p-2 rounded-full hover:bg-muted transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          {/* 스크롤 가능한 컨텐츠 영역 */}
+          <div className="flex-1 overflow-auto px-6 py-4 space-y-6">
             {/* 카테고리 이름 */}
             <div className="space-y-2">
               <Label>카테고리 이름</Label>
@@ -491,20 +532,86 @@ export default function SettingsPage() {
             {/* 색상 선택 */}
             <div className="space-y-3">
               <Label>색상</Label>
-              <div className="flex flex-wrap gap-3">
-                {COLOR_PALETTE.map((colorVal) => (
+              <div className="flex flex-wrap gap-3 items-center">
+                {QUICK_COLORS.map((colorVal) => (
                   <button
                     key={colorVal}
                     type="button"
                     onClick={() => setNewCategoryColor(colorVal)}
                     className={cn(
-                      'h-12 w-12 rounded-xl transition-all',
+                      'h-11 w-11 rounded-xl transition-all',
                       newCategoryColor === colorVal && 'ring-2 ring-offset-2 ring-primary scale-110'
                     )}
                     style={{ backgroundColor: colorVal }}
                   />
                 ))}
+                <button
+                  type="button"
+                  onClick={() => setShowFullPalette(!showFullPalette)}
+                  className={cn(
+                    'h-11 w-11 rounded-xl border-2 border-dashed border-muted-foreground/30 flex items-center justify-center text-muted-foreground hover:border-primary hover:text-primary transition-colors',
+                    showFullPalette && 'border-primary text-primary bg-primary/10'
+                  )}
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
               </div>
+
+              {/* 전체 색상 팔레트 */}
+              {showFullPalette && (
+                <div className="p-4 bg-muted/30 rounded-xl space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex flex-wrap gap-2">
+                    {FULL_COLOR_PALETTE.map((colorVal) => (
+                      <button
+                        key={colorVal}
+                        type="button"
+                        onClick={() => {
+                          setNewCategoryColor(colorVal);
+                          setShowFullPalette(false);
+                        }}
+                        className={cn(
+                          'h-9 w-9 rounded-lg transition-all',
+                          newCategoryColor === colorVal && 'ring-2 ring-offset-1 ring-primary scale-110'
+                        )}
+                        style={{ backgroundColor: colorVal }}
+                      />
+                    ))}
+                  </div>
+
+                  {/* 직접 입력 */}
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="h-9 w-9 rounded-lg border shrink-0"
+                      style={{ backgroundColor: customColorInput || newCategoryColor }}
+                    />
+                    <Input
+                      value={customColorInput}
+                      onChange={(e) => {
+                        setCustomColorInput(e.target.value);
+                        if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) {
+                          setNewCategoryColor(e.target.value);
+                        }
+                      }}
+                      placeholder="#FF5733"
+                      className="flex-1 h-9 font-mono text-sm"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        if (/^#[0-9A-Fa-f]{6}$/.test(customColorInput)) {
+                          setNewCategoryColor(customColorInput);
+                          setShowFullPalette(false);
+                        }
+                      }}
+                      disabled={!/^#[0-9A-Fa-f]{6}$/.test(customColorInput)}
+                    >
+                      적용
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 미리보기 */}
@@ -528,7 +635,7 @@ export default function SettingsPage() {
             </div>
 
             {/* 버튼 */}
-            <div className="flex gap-3 pt-4">
+            <div className="flex gap-3 pt-4 pb-4">
               <Button
                 variant="outline"
                 onClick={() => setIsCategorySheetOpen(false)}

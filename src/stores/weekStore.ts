@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { Week } from '@/types';
+import { Week, WeeklyGoal } from '@/types';
 import { createClient } from '@/lib/supabase/client';
-import { getWeekId, getWeekRange, formatDate } from '@/lib/utils';
+import { getWeekId, getWeekRange, formatDate, generateId } from '@/lib/utils';
 import { addWeeks, subWeeks } from 'date-fns';
 
 interface WeekState {
@@ -18,6 +18,7 @@ interface WeekState {
   goToPrevWeek: () => void;
   goToToday: () => void;
   updateWeekGoals: (weekId: string, goals: string[]) => Promise<void>;
+  updateWeeklyGoals: (weekId: string, weeklyGoals: WeeklyGoal[]) => Promise<void>;
   updateWeekNotes: (weekId: string, notes: string) => Promise<void>;
   getCurrentWeek: () => Week | undefined;
   getOrCreateWeek: (date: Date) => Promise<Week>;
@@ -55,6 +56,7 @@ export const useWeekStore = create<WeekState>((set, get) => ({
         startDate: w.start_date,
         endDate: w.end_date,
         goals: w.goals || [],
+        weeklyGoals: w.weekly_goals || undefined,
         notes: w.notes || undefined,
         plannedMinutes: w.planned_minutes,
         completedMinutes: w.completed_minutes,
@@ -117,6 +119,31 @@ export const useWeekStore = create<WeekState>((set, get) => ({
     }));
   },
 
+  updateWeeklyGoals: async (weekId: string, weeklyGoals: WeeklyGoal[]) => {
+    const supabase = createClient();
+
+    const { error } = await supabase
+      .from('weeks')
+      .update({ weekly_goals: weeklyGoals })
+      .eq('id', weekId);
+
+    if (error) {
+      console.error('updateWeeklyGoals error:', error);
+      // weekly_goals 컬럼이 없을 수 있으므로 에러를 무시하고 로컬만 업데이트
+      if (error.code === '42703' || error.message?.includes('column')) {
+        console.warn('weekly_goals 컬럼이 없습니다. SQL 실행이 필요합니다: ALTER TABLE weeks ADD COLUMN weekly_goals jsonb;');
+      } else {
+        throw new Error(`주간 목표 저장 실패: ${error.message}`);
+      }
+    }
+
+    set((state) => ({
+      weeks: state.weeks.map((week) =>
+        week.id === weekId ? { ...week, weeklyGoals } : week
+      ),
+    }));
+  },
+
   updateWeekNotes: async (weekId: string, notes: string) => {
     const supabase = createClient();
 
@@ -149,6 +176,58 @@ export const useWeekStore = create<WeekState>((set, get) => ({
 
     if (!user) throw new Error('Not authenticated');
 
+    // 먼저 DB에서 해당 주가 있는지 확인
+    const { data: existingInDb } = await supabase
+      .from('weeks')
+      .select('*')
+      .eq('id', weekId)
+      .single();
+
+    if (existingInDb) {
+      // DB에 이미 있으면 로컬 상태에 추가하고 반환
+      const week: Week = {
+        id: existingInDb.id,
+        userId: existingInDb.user_id,
+        startDate: existingInDb.start_date,
+        endDate: existingInDb.end_date,
+        goals: existingInDb.goals || [],
+        weeklyGoals: existingInDb.weekly_goals || undefined,
+        notes: existingInDb.notes || undefined,
+        plannedMinutes: existingInDb.planned_minutes,
+        completedMinutes: existingInDb.completed_minutes,
+        createdAt: new Date(existingInDb.created_at),
+      };
+      set((state) => {
+        // 중복 추가 방지
+        if (state.weeks.find((w) => w.id === weekId)) return state;
+        return { weeks: [...state.weeks, week] };
+      });
+      return week;
+    }
+
+    // 프로필이 없으면 생성 (첫 로그인 시 트리거가 작동하지 않은 경우 대비)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .single();
+
+    if (!profile) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.name || user.user_metadata?.full_name || null,
+          avatar_url: user.user_metadata?.avatar_url || null,
+        });
+
+      if (profileError) {
+        console.error('프로필 생성 실패:', profileError);
+        throw new Error(`프로필 생성 실패: ${profileError.message}`);
+      }
+    }
+
     const { start, end } = getWeekRange(date);
     const newWeekData = {
       id: weekId,
@@ -174,6 +253,7 @@ export const useWeekStore = create<WeekState>((set, get) => ({
       startDate: inserted.start_date,
       endDate: inserted.end_date,
       goals: inserted.goals || [],
+      weeklyGoals: inserted.weekly_goals || undefined,
       notes: inserted.notes || undefined,
       plannedMinutes: inserted.planned_minutes,
       completedMinutes: inserted.completed_minutes,

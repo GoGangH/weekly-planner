@@ -1,7 +1,7 @@
 'use client';
 
 import { Schedule } from '@/types';
-import { cn, timeToMinutes, hexToRgba, formatDuration } from '@/lib/utils';
+import { cn, timeToMinutes, hexToRgba, formatDuration, normalizeTime } from '@/lib/utils';
 import { CheckCircle, Clock, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -106,7 +106,7 @@ export function ScheduleBlock({
         {durationMinutes >= 30 && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>
-              {schedule.startTime} - {schedule.endTime}
+              {normalizeTime(schedule.startTime)} - {normalizeTime(schedule.endTime)}
             </span>
             <span>({formatDuration(durationMinutes)})</span>
             {isCompleted && <CheckCircle className="h-3 w-3 text-green-600" />}

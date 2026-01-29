@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Routine, RoutineFormData } from '@/types';
+import { format } from 'date-fns';
+import { Routine, RoutineFormData, RoutineItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DAYS_OF_WEEK } from '@/lib/constants';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { cn } from '@/lib/utils';
-import { Clock, Zap } from 'lucide-react';
+import { cn, generateId, formatDate } from '@/lib/utils';
+import { Clock, Zap, Plus, X, ListTodo, CalendarDays, Infinity } from 'lucide-react';
 
 interface RoutineFormProps {
   initialData?: Routine;
@@ -26,8 +27,12 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
   const [endTime, setEndTime] = useState(initialData?.endTime || '10:00');
   const [isActive, setIsActive] = useState(initialData?.isActive ?? true);
   const [autoSchedule, setAutoSchedule] = useState(initialData?.autoSchedule ?? true);
+  const [items, setItems] = useState<RoutineItem[]>(initialData?.items || []);
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [startDate, setStartDate] = useState(initialData?.startDate || formatDate(new Date()));
+  const [endDate, setEndDate] = useState(initialData?.endDate || '');
+  const [isIndefinite, setIsIndefinite] = useState(!initialData?.endDate);
   const [category, setCategory] = useState(() => {
-    // 초기 색상에서 카테고리 찾기
     if (initialData?.color) {
       const found = categories.find((c) => c.color === initialData.color);
       return found?.value || '';
@@ -35,10 +40,27 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
     return '';
   });
 
-  // 카테고리에서 색상 자동 결정
   const getColorFromCategory = (cat: string) => {
     const found = categories.find((c) => c.value === cat);
     return found?.color || categories[0]?.color || '#34D399';
+  };
+
+  // 할일 추가
+  const handleAddItem = () => {
+    if (newItemTitle.trim()) {
+      const newItem: RoutineItem = {
+        id: generateId(),
+        title: newItemTitle.trim(),
+        order: items.length,
+      };
+      setItems([...items, newItem]);
+      setNewItemTitle('');
+    }
+  };
+
+  // 할일 삭제
+  const handleRemoveItem = (itemId: string) => {
+    setItems(items.filter((item) => item.id !== itemId));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -52,6 +74,9 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
       isActive,
       autoSchedule,
       color: getColorFromCategory(category),
+      items,
+      startDate,
+      endDate: isIndefinite ? undefined : endDate,
     });
   };
 
@@ -81,7 +106,7 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
       <Input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="루틴 이름을 입력하세요"
+        placeholder="루틴 이름 (예: 아침 루틴)"
         className="text-lg font-medium border-0 border-b rounded-none px-0 focus-visible:ring-0"
         autoFocus
         required
@@ -119,6 +144,53 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
         </div>
       </div>
 
+      {/* Period - 기간 설정 */}
+      <div className="space-y-3">
+        <Label className="text-sm text-muted-foreground flex items-center gap-1">
+          <CalendarDays className="h-4 w-4" />
+          기간 설정
+        </Label>
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground mb-1 block">시작일</Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="flex-1">
+            <Label className="text-xs text-muted-foreground mb-1 block">종료일</Label>
+            {isIndefinite ? (
+              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted/50 text-muted-foreground text-sm">
+                <Infinity className="h-4 w-4" />
+                무기한
+              </div>
+            ) : (
+              <Input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                min={startDate}
+                className="w-full"
+              />
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsIndefinite(!isIndefinite)}
+          className={cn(
+            'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+            isIndefinite ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+          )}
+        >
+          <Infinity className="h-4 w-4" />
+          무기한으로 반복
+        </button>
+      </div>
+
       {/* Days */}
       <div className="space-y-3">
         <Label className="text-sm text-muted-foreground">반복 요일</Label>
@@ -150,6 +222,64 @@ export function RoutineForm({ initialData, onSubmit, onCancel }: RoutineFormProp
               {day.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* 루틴 내 할일 목록 */}
+      <div className="space-y-3">
+        <Label className="text-sm text-muted-foreground flex items-center gap-1">
+          <ListTodo className="h-4 w-4" />
+          할일 목록 ({items.length}개)
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          이 루틴에 포함된 할일들을 추가하세요. 일정에 추가될 때 체크리스트로 표시됩니다.
+        </p>
+
+        {/* 기존 할일 목록 */}
+        {items.length > 0 && (
+          <div className="space-y-2">
+            {items.map((item, index) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-2 bg-muted/50 rounded-lg px-3 py-2"
+              >
+                <span className="text-xs text-muted-foreground w-5">{index + 1}.</span>
+                <span className="flex-1 text-sm">{item.title}</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveItem(item.id)}
+                  className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 새 할일 추가 */}
+        <div className="flex gap-2">
+          <Input
+            value={newItemTitle}
+            onChange={(e) => setNewItemTitle(e.target.value)}
+            placeholder="할일 추가 (예: 듀오링고 10분)"
+            className="flex-1"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddItem();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={handleAddItem}
+            disabled={!newItemTitle.trim()}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 

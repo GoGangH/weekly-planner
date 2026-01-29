@@ -37,7 +37,8 @@ export function ScheduleTaskForm({
   // Time settings
   const [startTime, setStartTime] = useState(initialTime);
   const [estimatedMinutes, setEstimatedMinutes] = useState(30);
-  const [customMinutes, setCustomMinutes] = useState('');
+  const [customHours, setCustomHours] = useState(0);
+  const [customMins, setCustomMins] = useState(30);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [endTime, setEndTime] = useState(() => addMinutesToTime(initialTime, 30));
 
@@ -46,10 +47,12 @@ export function ScheduleTaskForm({
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
 
-  // 카테고리에서 색상 자동 결정
+  // 카테고리에서 색상 자동 결정 (기본 보라색)
+  const DEFAULT_COLOR = '#8B7CF6';
   const getColorFromCategory = (cat: string) => {
+    if (!cat) return DEFAULT_COLOR;
     const found = categories.find((c) => c.value === cat);
-    return found?.color || categories[0]?.color || '#8B7CF6';
+    return found?.color || DEFAULT_COLOR;
   };
 
   // Update end time when start time or duration changes
@@ -60,14 +63,18 @@ export function ScheduleTaskForm({
   const handleDurationChange = (mins: number) => {
     setEstimatedMinutes(mins);
     setShowCustomInput(false);
-    setCustomMinutes('');
+    setCustomHours(Math.floor(mins / 60));
+    setCustomMins(mins % 60);
   };
 
-  const handleCustomMinutesChange = (value: string) => {
-    setCustomMinutes(value);
-    const mins = parseInt(value, 10);
-    if (!isNaN(mins) && mins > 0) {
-      setEstimatedMinutes(mins);
+  const handleCustomTimeChange = (hours: number, mins: number) => {
+    const h = Math.max(0, Math.min(23, hours));
+    const m = Math.max(0, Math.min(59, mins));
+    setCustomHours(h);
+    setCustomMins(m);
+    const totalMins = h * 60 + m;
+    if (totalMins > 0) {
+      setEstimatedMinutes(totalMins);
     }
   };
 
@@ -233,20 +240,32 @@ export function ScheduleTaskForm({
             </button>
           </div>
 
-          {/* Custom duration input */}
+          {/* Custom duration input - 시간 + 분 */}
           {showCustomInput && (
-            <div className="flex items-center gap-3 mt-3 animate-slide-up">
-              <Input
-                type="number"
-                min="5"
-                max="720"
-                step="5"
-                value={customMinutes}
-                onChange={(e) => handleCustomMinutesChange(e.target.value)}
-                placeholder="분 단위로 입력"
-                className="flex-1 rounded-xl px-4 py-3"
-              />
-              <span className="text-sm text-muted-foreground font-medium">분</span>
+            <div className="flex items-center gap-2 mt-3 animate-slide-up">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min="0"
+                  max="23"
+                  value={customHours}
+                  onChange={(e) => handleCustomTimeChange(parseInt(e.target.value) || 0, customMins)}
+                  className="w-16 rounded-xl px-3 py-2.5 text-center"
+                />
+                <span className="text-sm text-muted-foreground font-medium">시간</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min="0"
+                  max="59"
+                  step="5"
+                  value={customMins}
+                  onChange={(e) => handleCustomTimeChange(customHours, parseInt(e.target.value) || 0)}
+                  className="w-16 rounded-xl px-3 py-2.5 text-center"
+                />
+                <span className="text-sm text-muted-foreground font-medium">분</span>
+              </div>
             </div>
           )}
         </div>

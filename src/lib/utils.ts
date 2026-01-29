@@ -66,8 +66,18 @@ export function isWeekend(date: Date | string): boolean {
 }
 
 // Time utilities
+// 시간 문자열을 HH:MM 형식으로 정규화 (초 제거)
+export function normalizeTime(timeStr: string): string {
+  if (!timeStr) return '00:00';
+  const parts = timeStr.split(':');
+  const hours = String(parts[0] || '0').padStart(2, '0');
+  const minutes = String(parts[1] || '0').padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 export function parseTime(timeStr: string): { hours: number; minutes: number } {
-  const [hours, minutes] = timeStr.split(':').map(Number);
+  const normalized = normalizeTime(timeStr);
+  const [hours, minutes] = normalized.split(':').map(Number);
   return { hours, minutes };
 }
 
